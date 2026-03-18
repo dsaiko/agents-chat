@@ -2,97 +2,91 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
 
 // Language holds localized UI strings for a specific language.
 type Language struct {
-	Moderator        string                 // Label for the moderator in conversation history
-	Round            func(i, total int) string // Formats the round header (e.g. "Round 1/5")
-	EmptyReply       string                 // Placeholder when an agent returns no text
-	ConversationPre  string                 // Prompt prefix before conversation history
-	ConversationPost string                 // Prompt suffix instructing the agent to reply
-	Language         string                 // Human-readable language detection result
+	Moderator        string `json:"moderator"`
+	RoundFormat      string `json:"round_format"`
+	EmptyReply       string `json:"empty_reply"`
+	ConversationPre  string `json:"conversation_pre"`
+	ConversationPost string `json:"conversation_post"`
+	Language         string `json:"detected_language"`
 }
 
-// languages maps ISO 639-1 codes to localized UI strings.
-var languages = map[string]Language{
-	"cs": {
-		Moderator:        "Moderátor",
-		Round:            func(i, total int) string { return fmt.Sprintf("Kolo %d/%d", i, total) },
-		EmptyReply:       "(prázdná odpověď)",
-		ConversationPre:  "Dosavadní konverzace:",
-		ConversationPost: "Odpověz jako další účastník debaty. Nenapiš nic navíc mimo svou repliku.",
-		Language:         "Detekovaný jazyk: Čeština",
-	},
-	"en": {
-		Moderator:        "Moderator",
-		Round:            func(i, total int) string { return fmt.Sprintf("Round %d/%d", i, total) },
-		EmptyReply:       "(empty reply)",
-		ConversationPre:  "Conversation so far:",
-		ConversationPost: "Reply as the next participant of the debate. Write nothing beyond your reply.",
-		Language:         "Detected language: English",
-	},
-	"de": {
-		Moderator:        "Moderator",
-		Round:            func(i, total int) string { return fmt.Sprintf("Runde %d/%d", i, total) },
-		EmptyReply:       "(leere Antwort)",
-		ConversationPre:  "Bisheriges Gespräch:",
-		ConversationPost: "Antworte als nächster Teilnehmer der Debatte. Schreibe nichts außer deiner Antwort.",
-		Language:         "Erkannte Sprache: Deutsch",
-	},
-	"fr": {
-		Moderator:        "Modérateur",
-		Round:            func(i, total int) string { return fmt.Sprintf("Tour %d/%d", i, total) },
-		EmptyReply:       "(réponse vide)",
-		ConversationPre:  "Conversation jusqu'ici :",
-		ConversationPost: "Réponds en tant que prochain participant du débat. N'écris rien d'autre que ta réplique.",
-		Language:         "Langue détectée : Français",
-	},
-	"es": {
-		Moderator:        "Moderador",
-		Round:            func(i, total int) string { return fmt.Sprintf("Ronda %d/%d", i, total) },
-		EmptyReply:       "(respuesta vacía)",
-		ConversationPre:  "Conversación hasta ahora:",
-		ConversationPost: "Responde como el siguiente participante del debate. No escribas nada más que tu réplica.",
-		Language:         "Idioma detectado: Español",
-	},
-	"pt": {
-		Moderator:        "Moderador",
-		Round:            func(i, total int) string { return fmt.Sprintf("Rodada %d/%d", i, total) },
-		EmptyReply:       "(resposta vazia)",
-		ConversationPre:  "Conversa até agora:",
-		ConversationPost: "Responda como o próximo participante do debate. Não escreva nada além da sua réplica.",
-		Language:         "Idioma detectado: Português",
-	},
-	"it": {
-		Moderator:        "Moderatore",
-		Round:            func(i, total int) string { return fmt.Sprintf("Turno %d/%d", i, total) },
-		EmptyReply:       "(risposta vuota)",
-		ConversationPre:  "Conversazione finora:",
-		ConversationPost: "Rispondi come il prossimo partecipante del dibattito. Non scrivere nient'altro che la tua replica.",
-		Language:         "Lingua rilevata: Italiano",
-	},
+// Round formats the round header using the localized format string.
+func (l Language) Round(i, total int) string {
+	return fmt.Sprintf(l.RoundFormat, i, total)
 }
 
-// detectLanguage uses an LLM provider to detect the language of the given text
-// and returns the matching Language. Falls back to "en" on any failure.
+// defaultLanguage provides English defaults used as fallback.
+var defaultLanguage = Language{
+	Moderator:        "Moderator",
+	RoundFormat:      "Round %d/%d",
+	EmptyReply:       "(empty reply)",
+	ConversationPre:  "Conversation so far:",
+	ConversationPost: "Reply as the next participant of the debate. Write nothing beyond your reply.",
+	Language:         "Detected language: English",
+}
+
+// detectLanguage uses an LLM to detect the language of text and translate UI strings.
+// Falls back to English defaults on any failure.
 func detectLanguage(ctx context.Context, model string, text string) Language {
 	p, err := providerForModel(model)
 	if err != nil {
-		return languages["en"]
+		return defaultLanguage
 	}
 
-	result, err := p.Complete(ctx, model, "", "What language is the following text? Reply with ONLY the ISO 639-1 two-letter code, nothing else.\n\n"+text)
+	originals, _ := json.MarshalIndent(defaultLanguage, "", "  ")
+
+	prompt := fmt.Sprintf(`Detect the language of the text below and translate these UI strings into that language.
+Reply with ONLY a valid JSON object — no markdown, no code fences, no commentary.
+
+English originals:
+%s
+
+IMPORTANT:
+- Keep the two %%d/%%d placeholders exactly as-is in "round_format"
+- In "detected_language", translate the phrase and use the actual language name
+
+Text:
+%s`, originals, text)
+
+	result, err := p.Complete(ctx, model, "", prompt)
 	if err != nil {
-		return languages["en"]
+		return defaultLanguage
 	}
 
-	code := strings.TrimSpace(strings.ToLower(result))
-	if lang, ok := languages[code]; ok {
-		return lang
+	return parseLanguageJSON(result)
+}
+
+// parseLanguageJSON extracts a Language from an LLM response, stripping markdown fences if present.
+func parseLanguageJSON(raw string) Language {
+	s := strings.TrimSpace(raw)
+
+	// Strip markdown code fences if present
+	if strings.HasPrefix(s, "```") {
+		if idx := strings.Index(s[3:], "\n"); idx >= 0 {
+			s = s[3+idx+1:]
+		}
+		if idx := strings.LastIndex(s, "```"); idx >= 0 {
+			s = s[:idx]
+		}
+		s = strings.TrimSpace(s)
 	}
 
-	return languages["en"]
+	var lang Language
+	if err := json.Unmarshal([]byte(s), &lang); err != nil {
+		return defaultLanguage
+	}
+
+	// Validate that RoundFormat contains %d placeholders
+	if lang.RoundFormat == "" || !strings.Contains(lang.RoundFormat, "%d") {
+		lang.RoundFormat = defaultLanguage.RoundFormat
+	}
+
+	return lang
 }

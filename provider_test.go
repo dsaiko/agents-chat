@@ -71,7 +71,7 @@ func TestRunAgentWithMock(t *testing.T) {
 		ProviderOpenAI: &mockProvider{response: "Hello from mock"},
 	}
 
-	lang := languages["en"]
+	lang := defaultLanguage
 	agent := Agent{Name: "Test", Model: "gpt-4o", Instructions: "Be helpful."}
 	history := []string{"Moderator: Test question"}
 
@@ -92,7 +92,7 @@ func TestRunAgentEmptyReply(t *testing.T) {
 		ProviderOpenAI: &mockProvider{response: ""},
 	}
 
-	lang := languages["en"]
+	lang := defaultLanguage
 	agent := Agent{Name: "Test", Model: "gpt-4o", Instructions: "Be helpful."}
 
 	reply, err := runAgent(context.Background(), lang, agent, []string{"Moderator: Hi"})
@@ -112,7 +112,7 @@ func TestRunAgentProviderError(t *testing.T) {
 		ProviderOpenAI: &mockProvider{err: fmt.Errorf("API error")},
 	}
 
-	lang := languages["en"]
+	lang := defaultLanguage
 	agent := Agent{Name: "Test", Model: "gpt-4o", Instructions: "Be helpful."}
 
 	_, err := runAgent(context.Background(), lang, agent, []string{"Moderator: Hi"})
@@ -122,7 +122,7 @@ func TestRunAgentProviderError(t *testing.T) {
 }
 
 func TestBuildPrompt(t *testing.T) {
-	lang := languages["en"]
+	lang := defaultLanguage
 	history := []string{"Moderator: Topic", "Agent A: Reply 1"}
 
 	prompt := buildPrompt(lang, history)
@@ -142,7 +142,7 @@ func TestBuildPrompt(t *testing.T) {
 }
 
 func TestBuildPromptTruncation(t *testing.T) {
-	lang := languages["en"]
+	lang := defaultLanguage
 
 	// Create 10 history entries — only last 8 should appear
 	var history []string
@@ -166,17 +166,33 @@ func TestBuildPromptTruncation(t *testing.T) {
 	}
 }
 
+func TestRoundFormat(t *testing.T) {
+	lang := defaultLanguage
+	got := lang.Round(2, 5)
+	want := "Round 2/5"
+	if got != want {
+		t.Errorf("Round(2, 5) = %q, want %q", got, want)
+	}
+}
+
 func TestDetectLanguageWithMock(t *testing.T) {
 	orig := providers
 	defer func() { providers = orig }()
 
+	czJSON := `{"moderator":"Moderátor","round_format":"Kolo %d/%d","empty_reply":"(prázdná odpověď)","conversation_pre":"Dosavadní konverzace:","conversation_post":"Odpověz jako další účastník debaty. Nenapiš nic navíc mimo svou repliku.","detected_language":"Detekovaný jazyk: Čeština"}`
 	providers = map[string]Provider{
-		ProviderOpenAI: &mockProvider{response: "cs"},
+		ProviderOpenAI: &mockProvider{response: czJSON},
 	}
 
 	lang := detectLanguage(context.Background(), "gpt-4o", "Nějaký český text")
-	if lang.Language != languages["cs"].Language {
-		t.Errorf("got %q, want Czech", lang.Language)
+	if lang.Moderator != "Moderátor" {
+		t.Errorf("Moderator = %q, want %q", lang.Moderator, "Moderátor")
+	}
+	if lang.Language != "Detekovaný jazyk: Čeština" {
+		t.Errorf("Language = %q, want Czech", lang.Language)
+	}
+	if got := lang.Round(1, 3); got != "Kolo 1/3" {
+		t.Errorf("Round(1,3) = %q, want %q", got, "Kolo 1/3")
 	}
 }
 
@@ -184,13 +200,13 @@ func TestDetectLanguageFallback(t *testing.T) {
 	orig := providers
 	defer func() { providers = orig }()
 
-	// Unknown language code → fallback to English
+	// Invalid JSON → fallback to English
 	providers = map[string]Provider{
-		ProviderOpenAI: &mockProvider{response: "xx"},
+		ProviderOpenAI: &mockProvider{response: "not json at all"},
 	}
 
 	lang := detectLanguage(context.Background(), "gpt-4o", "Some text")
-	if lang.Language != languages["en"].Language {
+	if lang.Language != defaultLanguage.Language {
 		t.Errorf("got %q, want English fallback", lang.Language)
 	}
 }
@@ -204,7 +220,7 @@ func TestDetectLanguageProviderError(t *testing.T) {
 	}
 
 	lang := detectLanguage(context.Background(), "gpt-4o", "Some text")
-	if lang.Language != languages["en"].Language {
+	if lang.Language != defaultLanguage.Language {
 		t.Errorf("got %q, want English fallback on error", lang.Language)
 	}
 }
@@ -216,8 +232,37 @@ func TestDetectLanguageNoProvider(t *testing.T) {
 	providers = map[string]Provider{}
 
 	lang := detectLanguage(context.Background(), "gpt-4o", "Some text")
-	if lang.Language != languages["en"].Language {
+	if lang.Language != defaultLanguage.Language {
 		t.Errorf("got %q, want English fallback when no provider", lang.Language)
+	}
+}
+
+func TestParseLanguageJSON(t *testing.T) {
+	// Plain JSON
+	json := `{"moderator":"Mod","round_format":"R %d/%d","empty_reply":"(e)","conversation_pre":"Pre:","conversation_post":"Post.","detected_language":"Lang: Test"}`
+	lang := parseLanguageJSON(json)
+	if lang.Moderator != "Mod" {
+		t.Errorf("Moderator = %q, want %q", lang.Moderator, "Mod")
+	}
+
+	// JSON wrapped in markdown code fences
+	fenced := "```json\n" + json + "\n```"
+	lang = parseLanguageJSON(fenced)
+	if lang.Moderator != "Mod" {
+		t.Errorf("fenced: Moderator = %q, want %q", lang.Moderator, "Mod")
+	}
+
+	// Missing round_format %d → should use default
+	noFmt := `{"moderator":"M","round_format":"Runde","empty_reply":"(e)","conversation_pre":"P:","conversation_post":"P.","detected_language":"L"}`
+	lang = parseLanguageJSON(noFmt)
+	if lang.RoundFormat != defaultLanguage.RoundFormat {
+		t.Errorf("RoundFormat = %q, want default %q", lang.RoundFormat, defaultLanguage.RoundFormat)
+	}
+
+	// Invalid JSON → default
+	lang = parseLanguageJSON("garbage")
+	if lang != defaultLanguage {
+		t.Errorf("expected defaultLanguage for invalid JSON")
 	}
 }
 
