@@ -20,6 +20,7 @@ type Demo struct {
 type Agent struct {
 	Name         string // Display name from frontmatter
 	Model        string // LLM model identifier (determines which provider to use)
+	MaxTokens    int    // Maximum response tokens (0 = provider default)
 	Instructions string // System prompt / personality from the markdown body
 }
 
@@ -32,7 +33,7 @@ func (d *Demo) Load(dir string) error {
 		return fmt.Errorf("reading Question.md: %w", err)
 	}
 
-	fm, body, err := d.ParseFrontmatter(string(questionData))
+	fm, body, err := parseFrontmatter(string(questionData))
 	if err != nil {
 		// No frontmatter — treat entire file as question text, default rounds
 		d.Question = strings.TrimSpace(string(questionData))
@@ -65,7 +66,7 @@ func (d *Demo) Load(dir string) error {
 			return fmt.Errorf("reading %s: %w", name, err)
 		}
 
-		agent, err := d.ParseAgentFile(string(data))
+		agent, err := parseAgentFile(string(data))
 		if err != nil {
 			return fmt.Errorf("parsing %s: %w", name, err)
 		}
@@ -79,10 +80,10 @@ func (d *Demo) Load(dir string) error {
 	return nil
 }
 
-// ParseAgentFile parses a markdown file with frontmatter containing "name" and "model" fields.
+// parseAgentFile parses a markdown file with frontmatter containing "name" and "model" fields.
 // The markdown body becomes the agent's system prompt / instructions.
-func (d *Demo) ParseAgentFile(content string) (Agent, error) {
-	fm, body, err := d.ParseFrontmatter(content)
+func parseAgentFile(content string) (Agent, error) {
+	fm, body, err := parseFrontmatter(content)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -92,12 +93,19 @@ func (d *Demo) ParseAgentFile(content string) (Agent, error) {
 	if fm["model"] == "" {
 		return Agent{}, fmt.Errorf("missing 'model' in frontmatter")
 	}
-	return Agent{Name: fm["name"], Model: fm["model"], Instructions: body}, nil
+	agent := Agent{Name: fm["name"], Model: fm["model"], Instructions: body}
+	if v := fm["max_tokens"]; v != "" {
+		agent.MaxTokens, err = strconv.Atoi(v)
+		if err != nil {
+			return Agent{}, fmt.Errorf("invalid 'max_tokens' in frontmatter: %w", err)
+		}
+	}
+	return agent, nil
 }
 
-// ParseFrontmatter parses a markdown file with YAML-like frontmatter (key: value pairs)
+// parseFrontmatter parses a markdown file with YAML-like frontmatter (key: value pairs)
 // and returns the frontmatter fields as a map and the body text.
-func (d *Demo) ParseFrontmatter(content string) (map[string]string, string, error) {
+func parseFrontmatter(content string) (map[string]string, string, error) {
 	content = strings.TrimSpace(content)
 	if !strings.HasPrefix(content, "---") {
 		return nil, "", fmt.Errorf("missing frontmatter")

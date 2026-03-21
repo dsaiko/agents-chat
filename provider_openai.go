@@ -18,8 +18,8 @@ func NewOpenAIProvider(client openai.Client) *OpenAIProvider {
 	return &OpenAIProvider{client: client}
 }
 
-// Complete sends a prompt to OpenAI and returns the text response.
-func (p *OpenAIProvider) Complete(ctx context.Context, model string, systemPrompt string, userPrompt string) (string, error) {
+// Generate sends a prompt to OpenAI and returns the text response.
+func (p *OpenAIProvider) Generate(ctx context.Context, model string, systemPrompt string, userPrompt string, cp GenerateParams) (string, error) {
 	params := responses.ResponseNewParams{
 		Model: model,
 		Input: responses.ResponseNewParamsInputUnion{
@@ -28,6 +28,9 @@ func (p *OpenAIProvider) Complete(ctx context.Context, model string, systemPromp
 	}
 	if systemPrompt != "" {
 		params.Instructions = openai.String(systemPrompt)
+	}
+	if cp.MaxTokens > 0 {
+		params.MaxOutputTokens = openai.Int(int64(cp.MaxTokens))
 	}
 
 	resp, err := p.client.Responses.New(ctx, params)

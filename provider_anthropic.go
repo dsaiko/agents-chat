@@ -17,10 +17,14 @@ func NewAnthropicProvider(client anthropic.Client) *AnthropicProvider {
 	return &AnthropicProvider{client: client}
 }
 
-// Complete sends a prompt to Anthropic and returns the text response.
-func (p *AnthropicProvider) Complete(ctx context.Context, model string, systemPrompt string, userPrompt string) (string, error) {
+// Generate sends a prompt to Anthropic and returns the text response.
+func (p *AnthropicProvider) Generate(ctx context.Context, model string, systemPrompt string, userPrompt string, cp GenerateParams) (string, error) {
+	maxTokens := int64(cp.MaxTokens)
+	if maxTokens <= 0 {
+		maxTokens = int64(defaultMaxTokens)
+	}
 	params := anthropic.MessageNewParams{
-		MaxTokens: 1024,
+		MaxTokens: maxTokens,
 		Model:     anthropic.Model(model),
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(

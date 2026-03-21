@@ -34,8 +34,8 @@ var defaultLanguage = Language{
 
 // detectLanguage uses an LLM to detect the language of text and translate UI strings.
 // Falls back to English defaults on any failure.
-func detectLanguage(ctx context.Context, model string, text string) Language {
-	p, err := providerForModel(model)
+func detectLanguage(ctx context.Context, providers Providers, model string, text string) Language {
+	p, model, err := providers.ForModel(model)
 	if err != nil {
 		return defaultLanguage
 	}
@@ -55,7 +55,7 @@ IMPORTANT:
 Text:
 %s`, originals, text)
 
-	result, err := p.Complete(ctx, model, "", prompt)
+	result, err := p.Generate(ctx, model, "", prompt, GenerateParams{})
 	if err != nil {
 		return defaultLanguage
 	}

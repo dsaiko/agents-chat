@@ -7,8 +7,6 @@ import (
 )
 
 func TestParseFrontmatter(t *testing.T) {
-	var d Demo
-
 	tests := []struct {
 		name       string
 		input      string
@@ -53,7 +51,7 @@ func TestParseFrontmatter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fields, body, err := d.ParseFrontmatter(tt.input)
+			fields, body, err := parseFrontmatter(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -76,8 +74,6 @@ func TestParseFrontmatter(t *testing.T) {
 }
 
 func TestParseAgentFile(t *testing.T) {
-	var d Demo
-
 	tests := []struct {
 		name    string
 		input   string
@@ -108,7 +104,7 @@ func TestParseAgentFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			agent, err := d.ParseAgentFile(tt.input)
+			agent, err := parseAgentFile(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")

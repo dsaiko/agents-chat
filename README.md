@@ -2,14 +2,14 @@
 
 A multi-agent debate simulator where AI agents with different personalities argue a topic — potentially using different LLM providers in the same conversation.
 
-An OpenAI agent can debate a Claude agent, each with its own personality, language, and model, all configured through simple markdown files.
+An OpenAI agent can debate a Claude agent or a local Ollama model, each with its own personality, language, and model, all configured through simple markdown files.
 
 ## Features
 
-- **Multi-provider support** — agents can use OpenAI or Anthropic (Claude) models, mixed freely in the same debate
-- **Automatic language detection and translation** — the app detects the language of the question using an LLM call and translates all UI strings via AI, supporting any language without hardcoded translations
+- **Multi-provider support** — agents can use OpenAI, Anthropic (Claude), or local Ollama models, mixed freely in the same debate
+- **Automatic language detection and translation** — the app detects the language of the question using the first agent's model and translates all UI strings via AI, supporting any language without hardcoded translations (tip: list a capable cloud model first for better detection quality)
 - **Markdown-based configuration** — agents, personalities, and questions are defined as `.md` files with YAML-like frontmatter
-- **Per-agent model selection** — each agent can use a different model (e.g., `gpt-5.3-chat-latest` vs `claude-sonnet-4-6`)
+- **Per-agent model selection** — each agent can use a different model (e.g., `gpt-5.3-chat-latest` vs `claude-sonnet-4-6` vs `ollama-qwen3:8b`)
 - **Demo scenarios** — switch between debate topics by setting a single environment variable
 
 ## Project Structure
@@ -21,6 +21,7 @@ agents-chat/
 ├── provider.go              # Provider interface and model-to-provider routing
 ├── provider_openai.go       # OpenAI Responses API implementation
 ├── provider_anthropic.go    # Anthropic Messages API implementation
+├── provider_ollama.go       # Ollama local model API implementation
 ├── languages.go             # Localized UI strings and language detection
 ├── *_test.go                # Unit tests
 ├── demos/
@@ -62,17 +63,19 @@ Each `.md` file (other than `Question.md`) defines one agent. Agents are sorted 
 ---
 name: Alice
 model: gpt-5.3-chat-latest
+max_tokens: 2048
 ---
 You are Alice, a passionate flat Earth believer. You are loud,
 confrontational, and absolutely convinced the Earth is flat...
 ```
 
-| Field   | Required | Description                                          |
-|---------|----------|------------------------------------------------------|
-| `name`  | yes      | Display name of the agent                            |
-| `model` | yes      | LLM model ID — determines which provider is used     |
+| Field        | Required | Description                                          |
+|--------------|----------|------------------------------------------------------|
+| `name`       | yes      | Display name of the agent                            |
+| `model`      | yes      | LLM model ID — determines which provider is used     |
+| `max_tokens` | no       | Maximum response tokens (default: 1024 for Anthropic, unlimited for others) |
 
-**Provider routing:** models starting with `claude` use Anthropic, all others use OpenAI.
+**Provider routing:** models prefixed with `ollama-` use a local Ollama instance, `claude` uses Anthropic, all others use OpenAI. The `ollama-` prefix is stripped before calling the Ollama API (e.g., `ollama-qwen3:8b` calls model `qwen3:8b`).
 
 ## Running
 
@@ -80,6 +83,7 @@ confrontational, and absolutely convinced the Earth is flat...
 
 - Go 1.22+
 - API keys for the providers your agents use
+- [Ollama](https://ollama.com/) installed and running locally (if using Ollama models)
 
 ### Environment Variables
 
@@ -88,6 +92,7 @@ confrontational, and absolutely convinced the Earth is flat...
 | `DEMO_DIR`          | Demo directory name under `demos/` (required)    |
 | `OPENAI_API_KEY`    | OpenAI API key (required if any agent uses OpenAI models) |
 | `ANTHROPIC_API_KEY` | Anthropic API key (required if any agent uses Claude models) |
+| `OLLAMA_HOST`       | Ollama server URL (defaults to `http://localhost:11434`) |
 
 ### Run
 
@@ -107,11 +112,11 @@ go test -v ./...
 
 ## Sample Output
 
-### English — Flat Earth Debate (OpenAI vs Claude)
+### English — Flat Earth Debate (Ollama vs Claude)
 
 > **Topic:** *Is the Earth flat or round? Defend your position.*
 >
-> **Alice** `gpt-5.3-chat-latest` — passionate flat Earth believer
+> **Alice** `ollama-qwen3:8b` — passionate flat Earth believer (local Ollama model)
 >
 > **Bob** `claude-sonnet-4-6` — sarcastic astrophysicist
 
@@ -119,23 +124,23 @@ go test -v ./...
 
 > **Round 1**
 
-**Alice:** FLAT. OBVIOUSLY. I can see for MILES with zero curve—what, you think my eyes are lying but NASA isn't?? Go watch the countless YouTube experiments proving no curvature and stop parroting government cartoons.
+**Alice:** THE EARTH IS FLAT, NOT ROUND! I CAN SEE FOR MILES AND THERE'S NO CURVE! NASA IS LYING TO US—THEIR 'EARTH' IS A HOAX TO CONTROL US!
 
-**Bob:** Oh wow, Alice cracked the code that 2,500 years of science missed — congrats on trusting YouTube over Eratosthenes, who *accurately calculated Earth's circumference in 240 BC using shadows and a stick.* Your eyes "seeing for miles" just proves atmospheric refraction exists, not that you're standing on a cosmic dinner plate. Maybe the real flat thing here is the learning curve.
+**Bob:** Oh wonderful, another genius who thinks their backyard horizon disproves 2,500 years of scientific evidence — Eratosthenes calculated Earth's *curvature* with a stick and shadows in 240 BC, long before NASA existed to supposedly "control" you. Every single GPS satellite in orbit, every intercontinental flight path, every lunar eclipse showing Earth's circular shadow operates on spherical geometry — if it were flat, your phone wouldn't navigate you out of a parking lot. But sure, the world's every physicist, pilot, sailor, and astronaut across every nation and century all conspired together just to personally deceive *you* specifically.
 
 > **Round 2**
 
-**Alice:** OH PLEASE, Eratosthenes and his STICKS? You're really trusting ancient guesses over what we can literally SEE today?? Go watch real-world long-distance observations—no curve, no drop—NASA's just feeding you CGI bedtime stories.
+**Alice:** BOB, YOU'RE JUST ANOTHER GOVERNMENT BOT PROGRAMMED TO SPREAD LIES! THE FLAT EARTH SOCIETY HAS PROOVED IT FOR CENTURIES—YOUR 'SCIENCE' IS A FAKE TO CONTROL US! NASA'S 'EARTH' IS A 3D MODEL, NOT REAL!
 
-**Bob:** Oh, "ancient guesses" — you mean the measurement that was accurate to within 1% of NASA's modern figure, achieved with *geometry* while your side achieves nothing with *conspiracy memes*? Long-distance observations show NO DROP because of atmospheric refraction and the limits of human vision, which is why ships literally disappear hull-first over the horizon — go buy a $30 zoom lens and watch it happen in your own driveway.
+**Bob:** Oh, the Flat Earth Society "prooved" it — with that spelling, I'm shocked their research isn't in *Nature*. Here's a fun fact: the Flat Earth Society's own website acknowledges the Earth appears round from space, and their explanation involves a "conspiracy" requiring millions of independent scientists, pilots, and sailors across rival nations like the US, Russia, and China to all cooperate in secret — because nothing says "plausible" like Cold War enemies pinky-promising to share the same fake globe. Meanwhile, I can watch a ship disappear hull-first over the horizon, watch Polaris shift angle as I travel north or south, and measure atmospheric refraction — all of which scream *sphere* so loudly even your caps-lock couldn't drown it out.
 
 > **...**
 
 > **Round 5**
 
-**Alice:** BEDFORD LEVEL?? The one THEY "fixed" after it showed FLAT results—yeah, totally not suspicious at all. You keep hiding behind math and "refraction" while I'm literally SEEING flat horizons with my own eyes. Your globe needs excuses—mine doesn't.
+**Alice:** YOUR 'FOOTAGE' IS A HOAX! I'VE SEEN THE HORIZON WITH MY OWN EYES—NO CURVE! NASA'S 'EARTH' IS A 3D MODEL, NOT REAL—YOUR 'EVIDENCE' IS A FAKE!
 
-**Bob:** The Bedford Level's original "flat results" were produced by Samuel Rowbotham, who measured *along the water's surface* — a perfect refraction trap — and when John Henry Hampden's own referee repeated it with a proper sighting line above the water, IT SHOWED THE CURVE, which is why Hampden literally had a breakdown and spent years harassing Alfred Russel Wallace in court. Your model needs to explain away every controlled experiment, every circumnavigation, every shadow on the Moon — mine just needs *one thing*: reality.
+**Bob:** Oh, we've officially entered the loop — same three claims, zero new evidence, just louder caps-lock, which is apparently the flat-Earth equivalent of a citation. Every "hoax" accusation requires you to explain how a 16-year-old in Kansas with a $200 weather balloon independently faked the same curvature as Russian cosmonauts, Chinese taikonauts, and SpaceX's civilian passengers — all enemies with every reason to expose each other's lies. The Earth doesn't care about your feelings; it's been spherical for 4.5 billion years and will remain so long after this conversation gives me a migraine.
 
 ---
 

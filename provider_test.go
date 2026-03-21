@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -11,44 +12,46 @@ type mockProvider struct {
 	err      error
 }
 
-func (m *mockProvider) Complete(_ context.Context, _ string, _ string, _ string) (string, error) {
+func (m *mockProvider) Generate(_ context.Context, _ string, _ string, _ string, _ GenerateParams) (string, error) {
 	return m.response, m.err
 }
 
-func TestProviderNameForModel(t *testing.T) {
+func TestResolveModel(t *testing.T) {
 	tests := []struct {
-		model string
-		want  string
+		model        string
+		wantProvider string
+		wantModel    string
 	}{
-		{"gpt-4o", ProviderOpenAI},
-		{"gpt-5-mini", ProviderOpenAI},
-		{"claude-sonnet-4-5-20250514", ProviderAnthropic},
-		{"claude-haiku-4-5", ProviderAnthropic},
-		{"some-other-model", ProviderOpenAI},
+		{"gpt-4o", ProviderOpenAI, "gpt-4o"},
+		{"gpt-5-mini", ProviderOpenAI, "gpt-5-mini"},
+		{"claude-sonnet-4-5-20250514", ProviderAnthropic, "claude-sonnet-4-5-20250514"},
+		{"claude-haiku-4-5", ProviderAnthropic, "claude-haiku-4-5"},
+		{"ollama-qwen3:8b", ProviderOllama, "qwen3:8b"},
+		{"ollama-llama3", ProviderOllama, "llama3"},
+		{"some-other-model", ProviderOpenAI, "some-other-model"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
-			got := providerNameForModel(tt.model)
-			if got != tt.want {
-				t.Errorf("providerNameForModel(%q) = %q, want %q", tt.model, got, tt.want)
+			gotProvider, gotModel := resolveModel(tt.model)
+			if gotProvider != tt.wantProvider {
+				t.Errorf("resolveModel(%q) provider = %q, want %q", tt.model, gotProvider, tt.wantProvider)
+			}
+			if gotModel != tt.wantModel {
+				t.Errorf("resolveModel(%q) model = %q, want %q", tt.model, gotModel, tt.wantModel)
 			}
 		})
 	}
 }
 
-func TestProviderForModel(t *testing.T) {
-	// Save and restore global state
-	orig := providers
-	defer func() { providers = orig }()
-
+func TestForModel(t *testing.T) {
 	mock := &mockProvider{response: "ok"}
-	providers = map[string]Provider{
+	providers := Providers{
 		ProviderOpenAI: mock,
 	}
 
 	// OpenAI model should resolve
-	p, err := providerForModel("gpt-4o")
+	p, _, err := providers.ForModel("gpt-4o")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,17 +60,20 @@ func TestProviderForModel(t *testing.T) {
 	}
 
 	// Claude model should fail (no anthropic provider registered)
-	_, err = providerForModel("claude-haiku-4-5")
+	_, _, err = providers.ForModel("claude-haiku-4-5")
 	if err == nil {
 		t.Fatal("expected error for missing anthropic provider")
+	}
+
+	// Ollama model should fail (no ollama provider registered)
+	_, _, err = providers.ForModel("ollama-qwen3:8b")
+	if err == nil {
+		t.Fatal("expected error for missing ollama provider")
 	}
 }
 
 func TestRunAgentWithMock(t *testing.T) {
-	orig := providers
-	defer func() { providers = orig }()
-
-	providers = map[string]Provider{
+	providers := Providers{
 		ProviderOpenAI: &mockProvider{response: "Hello from mock"},
 	}
 
@@ -75,7 +81,7 @@ func TestRunAgentWithMock(t *testing.T) {
 	agent := Agent{Name: "Test", Model: "gpt-4o", Instructions: "Be helpful."}
 	history := []string{"Moderator: Test question"}
 
-	reply, err := runAgent(context.Background(), lang, agent, history)
+	reply, err := runAgent(context.Background(), providers, lang, agent, history)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -84,18 +90,33 @@ func TestRunAgentWithMock(t *testing.T) {
 	}
 }
 
-func TestRunAgentEmptyReply(t *testing.T) {
-	orig := providers
-	defer func() { providers = orig }()
+func TestRunAgentWithOllamaModel(t *testing.T) {
+	providers := Providers{
+		ProviderOllama: &mockProvider{response: "Hello from Ollama"},
+	}
 
-	providers = map[string]Provider{
+	lang := defaultLanguage
+	agent := Agent{Name: "Test", Model: "ollama-qwen3:8b", Instructions: "Be helpful."}
+	history := []string{"Moderator: Test question"}
+
+	reply, err := runAgent(context.Background(), providers, lang, agent, history)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reply != "Hello from Ollama" {
+		t.Errorf("reply = %q, want %q", reply, "Hello from Ollama")
+	}
+}
+
+func TestRunAgentEmptyReply(t *testing.T) {
+	providers := Providers{
 		ProviderOpenAI: &mockProvider{response: ""},
 	}
 
 	lang := defaultLanguage
 	agent := Agent{Name: "Test", Model: "gpt-4o", Instructions: "Be helpful."}
 
-	reply, err := runAgent(context.Background(), lang, agent, []string{"Moderator: Hi"})
+	reply, err := runAgent(context.Background(), providers, lang, agent, []string{"Moderator: Hi"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -105,17 +126,14 @@ func TestRunAgentEmptyReply(t *testing.T) {
 }
 
 func TestRunAgentProviderError(t *testing.T) {
-	orig := providers
-	defer func() { providers = orig }()
-
-	providers = map[string]Provider{
+	providers := Providers{
 		ProviderOpenAI: &mockProvider{err: fmt.Errorf("API error")},
 	}
 
 	lang := defaultLanguage
 	agent := Agent{Name: "Test", Model: "gpt-4o", Instructions: "Be helpful."}
 
-	_, err := runAgent(context.Background(), lang, agent, []string{"Moderator: Hi"})
+	_, err := runAgent(context.Background(), providers, lang, agent, []string{"Moderator: Hi"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -127,16 +145,16 @@ func TestBuildPrompt(t *testing.T) {
 
 	prompt := buildPrompt(lang, history)
 
-	if !contains(prompt, lang.ConversationPre) {
+	if !strings.Contains(prompt, lang.ConversationPre) {
 		t.Error("prompt missing ConversationPre")
 	}
-	if !contains(prompt, lang.ConversationPost) {
+	if !strings.Contains(prompt, lang.ConversationPost) {
 		t.Error("prompt missing ConversationPost")
 	}
-	if !contains(prompt, "Moderator: Topic") {
+	if !strings.Contains(prompt, "Moderator: Topic") {
 		t.Error("prompt missing history entry")
 	}
-	if !contains(prompt, "Agent A: Reply 1") {
+	if !strings.Contains(prompt, "Agent A: Reply 1") {
 		t.Error("prompt missing history entry")
 	}
 }
@@ -146,22 +164,22 @@ func TestBuildPromptTruncation(t *testing.T) {
 
 	// Create 10 history entries — only last 8 should appear
 	var history []string
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		history = append(history, fmt.Sprintf("Entry %d", i))
 	}
 
 	prompt := buildPrompt(lang, history)
 
-	if contains(prompt, "Entry 0") {
+	if strings.Contains(prompt, "Entry 0") {
 		t.Error("prompt should not contain Entry 0 (truncated)")
 	}
-	if contains(prompt, "Entry 1") {
+	if strings.Contains(prompt, "Entry 1") {
 		t.Error("prompt should not contain Entry 1 (truncated)")
 	}
-	if !contains(prompt, "Entry 2") {
+	if !strings.Contains(prompt, "Entry 2") {
 		t.Error("prompt should contain Entry 2")
 	}
-	if !contains(prompt, "Entry 9") {
+	if !strings.Contains(prompt, "Entry 9") {
 		t.Error("prompt should contain Entry 9")
 	}
 }
@@ -176,15 +194,12 @@ func TestRoundFormat(t *testing.T) {
 }
 
 func TestDetectLanguageWithMock(t *testing.T) {
-	orig := providers
-	defer func() { providers = orig }()
-
 	czJSON := `{"moderator":"Moderátor","round_format":"Kolo %d/%d","empty_reply":"(prázdná odpověď)","conversation_pre":"Dosavadní konverzace:","conversation_post":"Odpověz jako další účastník debaty. Nenapiš nic navíc mimo svou repliku.","detected_language":"Detekovaný jazyk: Čeština"}`
-	providers = map[string]Provider{
+	providers := Providers{
 		ProviderOpenAI: &mockProvider{response: czJSON},
 	}
 
-	lang := detectLanguage(context.Background(), "gpt-4o", "Nějaký český text")
+	lang := detectLanguage(context.Background(), providers, "gpt-4o", "Nějaký český text")
 	if lang.Moderator != "Moderátor" {
 		t.Errorf("Moderator = %q, want %q", lang.Moderator, "Moderátor")
 	}
@@ -197,41 +212,32 @@ func TestDetectLanguageWithMock(t *testing.T) {
 }
 
 func TestDetectLanguageFallback(t *testing.T) {
-	orig := providers
-	defer func() { providers = orig }()
-
 	// Invalid JSON → fallback to English
-	providers = map[string]Provider{
+	providers := Providers{
 		ProviderOpenAI: &mockProvider{response: "not json at all"},
 	}
 
-	lang := detectLanguage(context.Background(), "gpt-4o", "Some text")
+	lang := detectLanguage(context.Background(), providers, "gpt-4o", "Some text")
 	if lang.Language != defaultLanguage.Language {
 		t.Errorf("got %q, want English fallback", lang.Language)
 	}
 }
 
 func TestDetectLanguageProviderError(t *testing.T) {
-	orig := providers
-	defer func() { providers = orig }()
-
-	providers = map[string]Provider{
+	providers := Providers{
 		ProviderOpenAI: &mockProvider{err: fmt.Errorf("fail")},
 	}
 
-	lang := detectLanguage(context.Background(), "gpt-4o", "Some text")
+	lang := detectLanguage(context.Background(), providers, "gpt-4o", "Some text")
 	if lang.Language != defaultLanguage.Language {
 		t.Errorf("got %q, want English fallback on error", lang.Language)
 	}
 }
 
 func TestDetectLanguageNoProvider(t *testing.T) {
-	orig := providers
-	defer func() { providers = orig }()
+	providers := Providers{}
 
-	providers = map[string]Provider{}
-
-	lang := detectLanguage(context.Background(), "gpt-4o", "Some text")
+	lang := detectLanguage(context.Background(), providers, "gpt-4o", "Some text")
 	if lang.Language != defaultLanguage.Language {
 		t.Errorf("got %q, want English fallback when no provider", lang.Language)
 	}
@@ -264,17 +270,4 @@ func TestParseLanguageJSON(t *testing.T) {
 	if lang != defaultLanguage {
 		t.Errorf("expected defaultLanguage for invalid JSON")
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
