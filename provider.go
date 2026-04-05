@@ -26,9 +26,10 @@ const defaultMaxTokens = 1024
 
 // GenerateParams holds optional parameters for a completion request.
 // Pointer fields use nil to mean "use provider default"; zero is a valid explicit value.
-// MaxTokens uses 0 as "provider default" since 0 tokens is not a meaningful value.
+// MaxTokens uses 0 as "not set" since 0 tokens is not a meaningful value; providers
+// that require a limit (e.g., Anthropic) fall back to defaultMaxTokens.
 type GenerateParams struct {
-	MaxTokens   int      // Maximum number of tokens to generate (0 = provider default)
+	MaxTokens   int      // Maximum number of tokens to generate (0 = not set; Anthropic defaults to defaultMaxTokens)
 	Temperature *float64 // Sampling temperature (nil = provider default, 0 = deterministic)
 	TopP        *float64 // Nucleus sampling threshold (nil = provider default)
 }

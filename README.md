@@ -260,11 +260,13 @@ To use an Ollama instance running on a different machine:
    Environment="OLLAMA_HOST=0.0.0.0:11434"
    ```
 
-2. Allow the port through the firewall:
+2. Allow the port through the firewall for the specific client machine:
 
    ```bash
-   sudo ufw allow 11434/tcp
+   sudo ufw allow from <client-ip> to any port 11434 proto tcp
    ```
+
+   Replace `<client-ip>` with the IP of the machine that will connect. Only use a broad `sudo ufw allow 11434/tcp` on a trusted LAN if you explicitly accept that risk.
 
 3. Reload and restart:
 
