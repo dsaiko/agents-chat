@@ -2,14 +2,14 @@
 
 A multi-agent debate simulator where AI agents with different personalities argue a topic — potentially using different LLM providers in the same conversation.
 
-An OpenAI agent can debate a Claude agent or a local Ollama model, each with its own personality, language, and model, all configured through simple YAML files.
+An OpenAI agent can debate a Claude agent, a local Ollama model, or any model via OpenRouter, each with its own personality, language, and model, all configured through simple YAML files.
 
 ## Features
 
-- **Multi-provider support** — agents can use OpenAI, Anthropic (Claude), or local Ollama models, mixed freely in the same debate
+- **Multi-provider support** — agents can use OpenAI, Anthropic (Claude), OpenRouter, or local Ollama models, mixed freely in the same debate
 - **Automatic language detection and translation** — the app detects the language of the question using the first agent's model and translates all UI strings via AI, supporting any language without hardcoded translations (tip: list a capable cloud model first for better detection quality)
 - **YAML-based configuration** — agents, personalities, and questions are defined as `.yaml` files
-- **Per-agent model selection** — each agent can use a different model (e.g., `gpt-5.3-chat-latest` vs `claude-sonnet-4-6` vs `ollama:qwen3:8b`)
+- **Per-agent model selection** — each agent can use a different model (e.g., `gpt-5.3-chat-latest` vs `claude-sonnet-4-6` vs `ollama/qwen3:8b` vs `openrouter/qwen/qwen3.6-plus:free`)
 - **Demo scenarios** — switch between debate topics by setting a single environment variable
 
 ## Project Structure
@@ -76,7 +76,7 @@ instructions: |
 | `temperature` | no       | Sampling temperature — higher values produce more creative/random output (provider default if not set) |
 | `top_p`       | no       | Nucleus sampling threshold — limits token selection to a cumulative probability (provider default if not set) |
 
-**Provider routing:** models prefixed with `ollama:` use a local Ollama instance, `claude` uses Anthropic, all others use OpenAI. The `ollama:` prefix is stripped before calling the Ollama API (e.g., `ollama:qwen3:8b` calls model `qwen3:8b`).
+**Provider routing:** models prefixed with `ollama/` use a local Ollama instance, `openrouter/` uses OpenRouter, `claude` uses Anthropic, all others use OpenAI. Provider prefixes are stripped before calling the API (e.g., `ollama/qwen3:8b` calls model `qwen3:8b`, `openrouter/qwen/qwen3.6-plus:free` calls model `qwen/qwen3.6-plus:free`).
 
 ## Running
 
@@ -91,9 +91,10 @@ instructions: |
 | Variable            | Description                                      |
 |---------------------|--------------------------------------------------|
 | `DEMO_DIR`          | Demo directory name under `demos/` (required)    |
-| `OPENAI_API_KEY`    | OpenAI API key (required if any agent uses OpenAI models) |
-| `ANTHROPIC_API_KEY` | Anthropic API key (required if any agent uses Claude models) |
-| `OLLAMA_HOST`       | Ollama server URL (defaults to `http://localhost:11434`) |
+| `OPENAI_API_KEY`      | OpenAI API key (required if any agent uses OpenAI models) |
+| `ANTHROPIC_API_KEY`   | Anthropic API key (required if any agent uses Claude models) |
+| `OPENROUTER_API_KEY`  | [OpenRouter](https://openrouter.ai/) API key (required if any agent uses OpenRouter models) |
+| `OLLAMA_HOST`         | Ollama server URL (defaults to `http://localhost:11434`) |
 
 ### Run
 
@@ -117,7 +118,7 @@ go test -v ./...
 
 > **Topic:** *Is the Earth flat or round? Defend your position.*
 >
-> **Alice** `ollama:qwen3:8b` — passionate flat Earth believer (local Ollama model)
+> **Alice** `ollama/qwen3:8b` — passionate flat Earth believer (local Ollama model)
 >
 > **Bob** `claude-sonnet-4-6` — sarcastic astrophysicist
 

@@ -15,9 +15,10 @@ import (
 
 // Provider name constants used as keys in the Providers map.
 const (
-	ProviderOpenAI    = "openai"
-	ProviderAnthropic = "anthropic"
-	ProviderOllama    = "ollama"
+	ProviderOpenAI      = "openai"
+	ProviderAnthropic   = "anthropic"
+	ProviderOllama      = "ollama"
+	ProviderOpenRouter  = "openrouter"
 )
 
 // defaultMaxTokens is the fallback max token limit for providers that require it (e.g., Anthropic).
@@ -40,7 +41,7 @@ type Provider interface {
 type Providers map[string]Provider
 
 // ForModel returns the Provider and resolved model name for a given model identifier.
-// Provider-specific prefixes (e.g., "ollama:") are stripped from the returned model name.
+// Provider-specific prefixes (e.g., "ollama/") are stripped from the returned model name.
 func (providers Providers) ForModel(model string) (Provider, string, error) {
 	name, resolvedModel := resolveModel(model)
 	p, ok := providers[name]
@@ -62,14 +63,24 @@ func initProviders() Providers {
 	if client, err := api.ClientFromEnvironment(); err == nil {
 		providers[ProviderOllama] = NewOllamaProvider(client)
 	}
+	if key := os.Getenv("OPENROUTER_API_KEY"); key != "" {
+		providers[ProviderOpenRouter] = NewOpenAIProvider(openai.NewClient(
+			openaiopt.WithAPIKey(key),
+			openaiopt.WithBaseURL("https://openrouter.ai/api/v1/"),
+		))
+	}
 	return providers
 }
 
 // resolveModel maps a model identifier to a provider name and the model name to pass to the API.
-// Models prefixed with "ollama:" route to Ollama (prefix stripped), "claude" to Anthropic, all others to OpenAI.
+// Models prefixed with "ollama/" route to Ollama (prefix stripped), "openrouter/" to OpenRouter (prefix stripped),
+// "claude" to Anthropic, all others to OpenAI.
 func resolveModel(model string) (providerName string, resolvedModel string) {
-	if m, ok := strings.CutPrefix(model, "ollama:"); ok {
+	if m, ok := strings.CutPrefix(model, "ollama/"); ok {
 		return ProviderOllama, m
+	}
+	if m, ok := strings.CutPrefix(model, "openrouter/"); ok {
+		return ProviderOpenRouter, m
 	}
 	if strings.HasPrefix(model, "claude") {
 		return ProviderAnthropic, model
