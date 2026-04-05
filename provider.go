@@ -25,11 +25,11 @@ const (
 const defaultMaxTokens = 1024
 
 // GenerateParams holds optional parameters for a completion request.
-// Zero values mean "use provider default".
+// Nil pointer values mean "use provider default"; zero is a valid explicit value.
 type GenerateParams struct {
-	MaxTokens   int     // Maximum number of tokens to generate (0 = provider default)
-	Temperature float64 // Sampling temperature (0 = not set, use provider default)
-	TopP        float64 // Nucleus sampling threshold (0 = not set, use provider default)
+	MaxTokens   int      // Maximum number of tokens to generate (0 = provider default)
+	Temperature *float64 // Sampling temperature (nil = provider default, 0 = deterministic)
+	TopP        *float64 // Nucleus sampling threshold (nil = provider default)
 }
 
 // Provider abstracts an LLM API for text completion.

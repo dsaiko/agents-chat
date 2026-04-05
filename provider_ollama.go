@@ -35,11 +35,11 @@ func (p *OllamaProvider) Generate(ctx context.Context, model string, systemPromp
 	if cp.MaxTokens > 0 {
 		opts["num_predict"] = cp.MaxTokens
 	}
-	if cp.Temperature > 0 {
-		opts["temperature"] = cp.Temperature
+	if cp.Temperature != nil {
+		opts["temperature"] = *cp.Temperature
 	}
-	if cp.TopP > 0 {
-		opts["top_p"] = cp.TopP
+	if cp.TopP != nil {
+		opts["top_p"] = *cp.TopP
 	}
 	if len(opts) > 0 {
 		req.Options = opts

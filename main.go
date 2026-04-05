@@ -81,8 +81,8 @@ func runAgent(ctx context.Context, providers Providers, lang Language, agent Age
 	prompt := buildPrompt(lang, history)
 	text, err := p.Generate(ctx, model, strings.TrimSpace(agent.Instructions), prompt, GenerateParams{
 		MaxTokens:   agent.MaxTokens,
-		Temperature: agent.Temperature,
-		TopP:        agent.TopP,
+		Temperature: agent.Temperature, // nil if not set in YAML
+		TopP:        agent.TopP,        // nil if not set in YAML
 	})
 	if err != nil {
 		return "", err

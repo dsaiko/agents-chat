@@ -100,7 +100,7 @@ instructions: |
 
 ```bash
 # Run a demo
-DEMO_DIR=flat_earth go run .
+DEMO_DIR=flat_earth_en go run .
 
 # Or specify a full path as CLI argument
 go run . demos/flat_earth_cz
@@ -242,7 +242,9 @@ The same debate in Czech — the app automatically detects the language and swit
 
 To use an Ollama instance running on a different machine:
 
-### On the remote machine
+> **Security note:** Ollama has no built-in authentication. Binding to `0.0.0.0` exposes the API to your entire network. For production use, restrict firewall rules to specific client IPs (`sudo ufw allow from <client-ip> to any port 11434`), use an SSH tunnel, or place Ollama behind a reverse proxy with authentication.
+
+### On the remote machine (server-side bind address)
 
 1. Edit the Ollama systemd service to listen on all interfaces:
 
@@ -250,7 +252,7 @@ To use an Ollama instance running on a different machine:
    sudo systemctl edit ollama.service --full
    ```
 
-   Add the `OLLAMA_HOST` environment line in the `[Service]` section:
+   Add the `OLLAMA_HOST` environment line in the `[Service]` section — here it acts as a **bind address** (no `http://` scheme):
 
    ```ini
    [Service]
@@ -271,9 +273,9 @@ To use an Ollama instance running on a different machine:
    sudo systemctl restart ollama
    ```
 
-### On the client machine
+### On the client machine (client URL)
 
-Set `OLLAMA_HOST` to point to the remote machine:
+Set `OLLAMA_HOST` as a full URL pointing to the remote machine:
 
 ```bash
 export OLLAMA_HOST=http://<remote-ip>:11434

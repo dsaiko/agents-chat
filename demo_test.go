@@ -121,11 +121,64 @@ func TestLoadWithAllAgentParams(t *testing.T) {
 	if agent.MaxTokens != 2048 {
 		t.Errorf("max_tokens = %d, want 2048", agent.MaxTokens)
 	}
-	if agent.Temperature != 0.9 {
-		t.Errorf("temperature = %f, want 0.9", agent.Temperature)
+	if agent.Temperature == nil || *agent.Temperature != 0.9 {
+		t.Errorf("temperature = %v, want 0.9", agent.Temperature)
 	}
-	if agent.TopP != 0.95 {
-		t.Errorf("top_p = %f, want 0.95", agent.TopP)
+	if agent.TopP == nil || *agent.TopP != 0.95 {
+		t.Errorf("top_p = %v, want 0.95", agent.TopP)
+	}
+}
+
+func TestLoadTemperatureZero(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "question: Test\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ntemperature: 0\ninstructions: Hi\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	agent := demo.Agents[0]
+	if agent.Temperature == nil {
+		t.Fatal("temperature should be set (not nil) when explicitly 0")
+	}
+	if *agent.Temperature != 0 {
+		t.Errorf("temperature = %f, want 0", *agent.Temperature)
+	}
+}
+
+func TestLoadTemperatureUnset(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "question: Test\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ninstructions: Hi\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if demo.Agents[0].Temperature != nil {
+		t.Errorf("temperature should be nil when not set, got %f", *demo.Agents[0].Temperature)
+	}
+	if demo.Agents[0].TopP != nil {
+		t.Errorf("top_p should be nil when not set, got %f", *demo.Agents[0].TopP)
 	}
 }
 
@@ -173,6 +226,25 @@ func TestLoadMissingQuestion(t *testing.T) {
 	var demo Demo
 	if err := demo.Load(dir); err == nil {
 		t.Fatal("expected error for missing question.yaml")
+	}
+}
+
+func TestLoadEmptyQuestion(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "rounds: 3\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ninstructions: Hi\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err == nil {
+		t.Fatal("expected error for empty question")
 	}
 }
 

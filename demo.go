@@ -19,12 +19,12 @@ type Demo struct {
 
 // Agent represents a single debate participant with its LLM configuration.
 type Agent struct {
-	Name         string  `yaml:"name"`
-	Model        string  `yaml:"model"`
-	MaxTokens    int     `yaml:"max_tokens"`
-	Temperature  float64 `yaml:"temperature"`
-	TopP         float64 `yaml:"top_p"`
-	Instructions string  `yaml:"instructions"`
+	Name         string   `yaml:"name"`
+	Model        string   `yaml:"model"`
+	MaxTokens    int      `yaml:"max_tokens"`
+	Temperature  *float64 `yaml:"temperature"`
+	TopP         *float64 `yaml:"top_p"`
+	Instructions string   `yaml:"instructions"`
 }
 
 // questionFile represents the YAML structure of question.yaml.
@@ -48,6 +48,9 @@ func (d *Demo) Load(dir string) error {
 	}
 
 	d.Question = strings.TrimSpace(qf.Question)
+	if d.Question == "" {
+		return fmt.Errorf("missing 'question' in question.yaml")
+	}
 	d.Rounds = qf.Rounds
 	if d.Rounds == 0 {
 		d.Rounds = 5
