@@ -26,8 +26,8 @@ func TestResolveModel(t *testing.T) {
 		{"gpt-5-mini", ProviderOpenAI, "gpt-5-mini"},
 		{"claude-sonnet-4-5-20250514", ProviderAnthropic, "claude-sonnet-4-5-20250514"},
 		{"claude-haiku-4-5", ProviderAnthropic, "claude-haiku-4-5"},
-		{"ollama-qwen3:8b", ProviderOllama, "qwen3:8b"},
-		{"ollama-llama3", ProviderOllama, "llama3"},
+		{"ollama:qwen3:8b", ProviderOllama, "qwen3:8b"},
+		{"ollama:llama3", ProviderOllama, "llama3"},
 		{"some-other-model", ProviderOpenAI, "some-other-model"},
 	}
 
@@ -66,7 +66,7 @@ func TestForModel(t *testing.T) {
 	}
 
 	// Ollama model should fail (no ollama provider registered)
-	_, _, err = providers.ForModel("ollama-qwen3:8b")
+	_, _, err = providers.ForModel("ollama:qwen3:8b")
 	if err == nil {
 		t.Fatal("expected error for missing ollama provider")
 	}
@@ -96,7 +96,7 @@ func TestRunAgentWithOllamaModel(t *testing.T) {
 	}
 
 	lang := defaultLanguage
-	agent := Agent{Name: "Test", Model: "ollama-qwen3:8b", Instructions: "Be helpful."}
+	agent := Agent{Name: "Test", Model: "ollama:qwen3:8b", Instructions: "Be helpful."}
 	history := []string{"Moderator: Test question"}
 
 	reply, err := runAgent(context.Background(), providers, lang, agent, history)

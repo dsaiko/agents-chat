@@ -6,121 +6,6 @@ import (
 	"testing"
 )
 
-func TestParseFrontmatter(t *testing.T) {
-	tests := []struct {
-		name       string
-		input      string
-		wantFields map[string]string
-		wantBody   string
-		wantErr    bool
-	}{
-		{
-			name:       "valid frontmatter with body",
-			input:      "---\nname: Test\nmodel: gpt-4o\n---\nHello world",
-			wantFields: map[string]string{"name": "Test", "model": "gpt-4o"},
-			wantBody:   "Hello world",
-		},
-		{
-			name:       "frontmatter only, no body",
-			input:      "---\nkey: value\n---",
-			wantFields: map[string]string{"key": "value"},
-			wantBody:   "",
-		},
-		{
-			name:       "whitespace around values",
-			input:      "---\n  name :  Agent A  \n---\nBody text",
-			wantFields: map[string]string{"name": "Agent A"},
-			wantBody:   "Body text",
-		},
-		{
-			name:    "missing opening delimiter",
-			input:   "name: Test\n---\nBody",
-			wantErr: true,
-		},
-		{
-			name:    "missing closing delimiter",
-			input:   "---\nname: Test\nBody",
-			wantErr: true,
-		},
-		{
-			name:    "empty input",
-			input:   "",
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fields, body, err := parseFrontmatter(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if body != tt.wantBody {
-				t.Errorf("body = %q, want %q", body, tt.wantBody)
-			}
-			for k, want := range tt.wantFields {
-				if got := fields[k]; got != want {
-					t.Errorf("fields[%q] = %q, want %q", k, got, want)
-				}
-			}
-		})
-	}
-}
-
-func TestParseAgentFile(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    Agent
-		wantErr bool
-	}{
-		{
-			name:  "valid agent",
-			input: "---\nname: Agent A\nmodel: gpt-4o\n---\nYou are helpful.",
-			want:  Agent{Name: "Agent A", Model: "gpt-4o", Instructions: "You are helpful."},
-		},
-		{
-			name:    "missing name",
-			input:   "---\nmodel: gpt-4o\n---\nInstructions",
-			wantErr: true,
-		},
-		{
-			name:    "missing model",
-			input:   "---\nname: Agent A\n---\nInstructions",
-			wantErr: true,
-		},
-		{
-			name:    "invalid frontmatter",
-			input:   "no frontmatter here",
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			agent, err := parseAgentFile(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if agent != tt.want {
-				t.Errorf("got %+v, want %+v", agent, tt.want)
-			}
-		})
-	}
-}
-
 func TestLoad(t *testing.T) {
 	dir := t.TempDir()
 
@@ -131,9 +16,9 @@ func TestLoad(t *testing.T) {
 		}
 	}
 
-	writeFile("Question.md", "What is Go?")
-	writeFile("AgentA.md", "---\nname: Alpha\nmodel: gpt-4o\n---\nBe concise.")
-	writeFile("AgentB.md", "---\nname: Beta\nmodel: gpt-5-mini\n---\nBe critical.")
+	writeFile("question.yaml", "question: What is Go?\n")
+	writeFile("AgentA.yaml", "name: Alpha\nmodel: gpt-4o\ninstructions: Be concise.\n")
+	writeFile("AgentB.yaml", "name: Beta\nmodel: gpt-5-mini\ninstructions: Be critical.\n")
 
 	var demo Demo
 	if err := demo.Load(dir); err != nil {
@@ -173,9 +58,9 @@ func TestLoadWithRounds(t *testing.T) {
 		}
 	}
 
-	writeFile("Question.md", "---\nrounds: 3\n---\nTest topic")
-	writeFile("AgentA.md", "---\nname: A\nmodel: gpt-4o\n---\nHi")
-	writeFile("AgentB.md", "---\nname: B\nmodel: gpt-4o\n---\nHi")
+	writeFile("question.yaml", "rounds: 3\nquestion: Test topic\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ninstructions: Hi\n")
+	writeFile("AgentB.yaml", "name: B\nmodel: gpt-4o\ninstructions: Hi\n")
 
 	var demo Demo
 	if err := demo.Load(dir); err != nil {
@@ -200,10 +85,9 @@ func TestLoadDefaultRounds(t *testing.T) {
 		}
 	}
 
-	// No frontmatter — should default to 5 rounds
-	writeFile("Question.md", "Plain question")
-	writeFile("AgentA.md", "---\nname: A\nmodel: gpt-4o\n---\nHi")
-	writeFile("AgentB.md", "---\nname: B\nmodel: gpt-4o\n---\nHi")
+	writeFile("question.yaml", "question: Plain question\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ninstructions: Hi\n")
+	writeFile("AgentB.yaml", "name: B\nmodel: gpt-4o\ninstructions: Hi\n")
 
 	var demo Demo
 	if err := demo.Load(dir); err != nil {
@@ -215,7 +99,7 @@ func TestLoadDefaultRounds(t *testing.T) {
 	}
 }
 
-func TestLoadInvalidRounds(t *testing.T) {
+func TestLoadWithAllAgentParams(t *testing.T) {
 	dir := t.TempDir()
 
 	writeFile := func(name, content string) {
@@ -225,12 +109,61 @@ func TestLoadInvalidRounds(t *testing.T) {
 		}
 	}
 
-	writeFile("Question.md", "---\nrounds: abc\n---\nTopic")
-	writeFile("AgentA.md", "---\nname: A\nmodel: gpt-4o\n---\nHi")
+	writeFile("question.yaml", "question: Test\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\nmax_tokens: 2048\ntemperature: 0.9\ntop_p: 0.95\ninstructions: Be helpful.\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	agent := demo.Agents[0]
+	if agent.MaxTokens != 2048 {
+		t.Errorf("max_tokens = %d, want 2048", agent.MaxTokens)
+	}
+	if agent.Temperature != 0.9 {
+		t.Errorf("temperature = %f, want 0.9", agent.Temperature)
+	}
+	if agent.TopP != 0.95 {
+		t.Errorf("top_p = %f, want 0.95", agent.TopP)
+	}
+}
+
+func TestLoadMissingName(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "question: Topic\n")
+	writeFile("AgentA.yaml", "model: gpt-4o\ninstructions: Hi\n")
 
 	var demo Demo
 	if err := demo.Load(dir); err == nil {
-		t.Fatal("expected error for invalid rounds")
+		t.Fatal("expected error for missing name")
+	}
+}
+
+func TestLoadMissingModel(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "question: Topic\n")
+	writeFile("AgentA.yaml", "name: A\ninstructions: Hi\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err == nil {
+		t.Fatal("expected error for missing model")
 	}
 }
 
@@ -239,11 +172,11 @@ func TestLoadMissingQuestion(t *testing.T) {
 
 	var demo Demo
 	if err := demo.Load(dir); err == nil {
-		t.Fatal("expected error for missing Question.md")
+		t.Fatal("expected error for missing question.yaml")
 	}
 }
 
-func TestLoadSkipsNonMdFiles(t *testing.T) {
+func TestLoadSkipsNonYamlFiles(t *testing.T) {
 	dir := t.TempDir()
 
 	writeFile := func(name, content string) {
@@ -253,10 +186,11 @@ func TestLoadSkipsNonMdFiles(t *testing.T) {
 		}
 	}
 
-	writeFile("Question.md", "Topic")
-	writeFile("AgentA.md", "---\nname: A\nmodel: gpt-4o\n---\nHi")
-	writeFile("AgentB.md", "---\nname: B\nmodel: gpt-4o\n---\nHi")
+	writeFile("question.yaml", "question: Topic\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ninstructions: Hi\n")
+	writeFile("AgentB.yaml", "name: B\nmodel: gpt-4o\ninstructions: Hi\n")
 	writeFile("notes.txt", "should be ignored")
+	writeFile("readme.md", "should also be ignored")
 
 	var demo Demo
 	if err := demo.Load(dir); err != nil {
@@ -264,6 +198,6 @@ func TestLoadSkipsNonMdFiles(t *testing.T) {
 	}
 
 	if len(demo.Agents) != 2 {
-		t.Errorf("got %d agents, want 2 (txt file should be ignored)", len(demo.Agents))
+		t.Errorf("got %d agents, want 2 (non-yaml files should be ignored)", len(demo.Agents))
 	}
 }

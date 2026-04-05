@@ -37,6 +37,12 @@ func (p *AnthropicProvider) Generate(ctx context.Context, model string, systemPr
 			{Text: systemPrompt},
 		}
 	}
+	if cp.Temperature > 0 {
+		params.Temperature = anthropic.Float(cp.Temperature)
+	}
+	if cp.TopP > 0 {
+		params.TopP = anthropic.Float(cp.TopP)
+	}
 
 	msg, err := p.client.Messages.New(ctx, params)
 	if err != nil {

@@ -2,14 +2,14 @@
 
 A multi-agent debate simulator where AI agents with different personalities argue a topic — potentially using different LLM providers in the same conversation.
 
-An OpenAI agent can debate a Claude agent or a local Ollama model, each with its own personality, language, and model, all configured through simple markdown files.
+An OpenAI agent can debate a Claude agent or a local Ollama model, each with its own personality, language, and model, all configured through simple YAML files.
 
 ## Features
 
 - **Multi-provider support** — agents can use OpenAI, Anthropic (Claude), or local Ollama models, mixed freely in the same debate
 - **Automatic language detection and translation** — the app detects the language of the question using the first agent's model and translates all UI strings via AI, supporting any language without hardcoded translations (tip: list a capable cloud model first for better detection quality)
-- **Markdown-based configuration** — agents, personalities, and questions are defined as `.md` files with YAML-like frontmatter
-- **Per-agent model selection** — each agent can use a different model (e.g., `gpt-5.3-chat-latest` vs `claude-sonnet-4-6` vs `ollama-qwen3:8b`)
+- **YAML-based configuration** — agents, personalities, and questions are defined as `.yaml` files
+- **Per-agent model selection** — each agent can use a different model (e.g., `gpt-5.3-chat-latest` vs `claude-sonnet-4-6` vs `ollama:qwen3:8b`)
 - **Demo scenarios** — switch between debate topics by setting a single environment variable
 
 ## Project Structure
@@ -17,7 +17,7 @@ An OpenAI agent can debate a Claude agent or a local Ollama model, each with its
 ```
 agents-chat/
 ├── main.go                  # Entry point, debate loop, prompt building
-├── demo.go                  # Demo/Agent config loading from markdown files
+├── demo.go                  # Demo/Agent config loading from YAML files
 ├── provider.go              # Provider interface and model-to-provider routing
 ├── provider_openai.go       # OpenAI Responses API implementation
 ├── provider_anthropic.go    # Anthropic Messages API implementation
@@ -25,57 +25,58 @@ agents-chat/
 ├── languages.go             # Localized UI strings and language detection
 ├── *_test.go                # Unit tests
 ├── demos/
-│   ├── flat_earth/          # English demo: Flat Earth debate
-│   │   ├── Question.md
-│   │   ├── AgentA.md
-│   │   └── AgentB.md
+│   ├── flat_earth_en/       # English demo: Flat Earth debate
+│   │   ├── question.yaml
+│   │   ├── AgentA.yaml
+│   │   └── AgentB.yaml
 │   └── flat_earth_cz/       # Czech demo: same topic in Czech
-│       ├── Question.md
-│       ├── AgentA.md
-│       └── AgentB.md
+│       ├── question.yaml
+│       ├── AgentA.yaml
+│       └── AgentB.yaml
 └── go.mod
 ```
 
 ## Configuration
 
-Each demo is a directory under `demos/` containing markdown files.
+Each demo is a directory under `demos/` containing YAML files.
 
-### Question.md
+### question.yaml
 
-Defines the debate topic and optional settings. The frontmatter is optional.
+Defines the debate topic and optional settings.
 
-```markdown
----
+```yaml
 rounds: 5
----
-Is the Earth flat or round? Defend your position.
+question: Is the Earth flat or round? Defend your position.
 ```
 
 | Field    | Description                  | Default |
 |----------|------------------------------|---------|
 | `rounds` | Number of debate rounds      | `5`     |
 
-### Agent files (e.g., AgentA.md, AgentB.md)
+### Agent files (e.g., AgentA.yaml, AgentB.yaml)
 
-Each `.md` file (other than `Question.md`) defines one agent. Agents are sorted alphabetically by name for turn order.
+Each `.yaml` file (other than `question.yaml`) defines one agent. Agents are sorted alphabetically by name for turn order.
 
-```markdown
----
+```yaml
 name: Alice
 model: gpt-5.3-chat-latest
 max_tokens: 2048
----
-You are Alice, a passionate flat Earth believer. You are loud,
-confrontational, and absolutely convinced the Earth is flat...
+temperature: 0.9
+top_p: 0.95
+instructions: |
+  You are Alice, a passionate flat Earth believer. You are loud,
+  confrontational, and absolutely convinced the Earth is flat...
 ```
 
-| Field        | Required | Description                                          |
-|--------------|----------|------------------------------------------------------|
-| `name`       | yes      | Display name of the agent                            |
-| `model`      | yes      | LLM model ID — determines which provider is used     |
-| `max_tokens` | no       | Maximum response tokens (default: 1024 for Anthropic, unlimited for others) |
+| Field         | Required | Description                                          |
+|---------------|----------|------------------------------------------------------|
+| `name`        | yes      | Display name of the agent                            |
+| `model`       | yes      | LLM model ID — determines which provider is used     |
+| `max_tokens`  | no       | Maximum response tokens (default: 1024 for Anthropic, unlimited for others) |
+| `temperature` | no       | Sampling temperature — higher values produce more creative/random output (provider default if not set) |
+| `top_p`       | no       | Nucleus sampling threshold — limits token selection to a cumulative probability (provider default if not set) |
 
-**Provider routing:** models prefixed with `ollama-` use a local Ollama instance, `claude` uses Anthropic, all others use OpenAI. The `ollama-` prefix is stripped before calling the Ollama API (e.g., `ollama-qwen3:8b` calls model `qwen3:8b`).
+**Provider routing:** models prefixed with `ollama:` use a local Ollama instance, `claude` uses Anthropic, all others use OpenAI. The `ollama:` prefix is stripped before calling the Ollama API (e.g., `ollama:qwen3:8b` calls model `qwen3:8b`).
 
 ## Running
 
@@ -116,7 +117,7 @@ go test -v ./...
 
 > **Topic:** *Is the Earth flat or round? Defend your position.*
 >
-> **Alice** `ollama-qwen3:8b` — passionate flat Earth believer (local Ollama model)
+> **Alice** `ollama:qwen3:8b` — passionate flat Earth believer (local Ollama model)
 >
 > **Bob** `claude-sonnet-4-6` — sarcastic astrophysicist
 
@@ -236,6 +237,48 @@ The same debate in Czech — the app automatically detects the language and swit
 
 ---
 
+## Remote Ollama Setup
+
+To use an Ollama instance running on a different machine:
+
+### On the remote machine
+
+1. Edit the Ollama systemd service to listen on all interfaces:
+
+   ```bash
+   sudo systemctl edit ollama.service --full
+   ```
+
+   Add the `OLLAMA_HOST` environment line in the `[Service]` section:
+
+   ```ini
+   [Service]
+   ...
+   Environment="OLLAMA_HOST=0.0.0.0:11434"
+   ```
+
+2. Allow the port through the firewall:
+
+   ```bash
+   sudo ufw allow 11434/tcp
+   ```
+
+3. Reload and restart:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart ollama
+   ```
+
+### On the client machine
+
+Set `OLLAMA_HOST` to point to the remote machine:
+
+```bash
+export OLLAMA_HOST=http://<remote-ip>:11434
+DEMO_DIR=flat_earth_ollama_en go run .
+```
+
 ## Creating Your Own Demo
 
 1. Create a new directory under `demos/`:
@@ -243,21 +286,18 @@ The same debate in Czech — the app automatically detects the language and swit
    demos/my_topic/
    ```
 
-2. Add a `Question.md` with the debate topic:
-   ```markdown
-   ---
+2. Add a `question.yaml` with the debate topic:
+   ```yaml
    rounds: 3
-   ---
-   Your debate question here.
+   question: Your debate question here.
    ```
 
-3. Add agent files (any name ending in `.md`):
-   ```markdown
-   ---
+3. Add agent files (any name ending in `.yaml`):
+   ```yaml
    name: Agent Name
    model: claude-sonnet-4-5-20250514
-   ---
-   Personality and instructions for this agent...
+   instructions: |
+     Personality and instructions for this agent...
    ```
 
 4. Run it:

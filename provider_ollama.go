@@ -31,8 +31,18 @@ func (p *OllamaProvider) Generate(ctx context.Context, model string, systemPromp
 		Messages: messages,
 		Stream:   &stream,
 	}
+	opts := map[string]any{}
 	if cp.MaxTokens > 0 {
-		req.Options = map[string]any{"num_predict": cp.MaxTokens}
+		opts["num_predict"] = cp.MaxTokens
+	}
+	if cp.Temperature > 0 {
+		opts["temperature"] = cp.Temperature
+	}
+	if cp.TopP > 0 {
+		opts["top_p"] = cp.TopP
+	}
+	if len(opts) > 0 {
+		req.Options = opts
 	}
 
 	var response api.ChatResponse

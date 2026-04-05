@@ -79,7 +79,11 @@ func runAgent(ctx context.Context, providers Providers, lang Language, agent Age
 	}
 
 	prompt := buildPrompt(lang, history)
-	text, err := p.Generate(ctx, model, strings.TrimSpace(agent.Instructions), prompt, GenerateParams{MaxTokens: agent.MaxTokens})
+	text, err := p.Generate(ctx, model, strings.TrimSpace(agent.Instructions), prompt, GenerateParams{
+		MaxTokens:   agent.MaxTokens,
+		Temperature: agent.Temperature,
+		TopP:        agent.TopP,
+	})
 	if err != nil {
 		return "", err
 	}
