@@ -32,6 +32,12 @@ func (p *OpenAIProvider) Generate(ctx context.Context, model string, systemPromp
 	if cp.MaxTokens > 0 {
 		params.MaxOutputTokens = openai.Int(int64(cp.MaxTokens))
 	}
+	if cp.Temperature != nil {
+		params.Temperature = openai.Float(*cp.Temperature)
+	}
+	if cp.TopP != nil {
+		params.TopP = openai.Float(*cp.TopP)
+	}
 
 	resp, err := p.client.Responses.New(ctx, params)
 	if err != nil {
