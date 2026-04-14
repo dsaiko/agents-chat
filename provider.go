@@ -66,7 +66,7 @@ func initProviders() Providers {
 		providers[ProviderOllama] = NewOllamaProvider(client)
 	}
 	if key := os.Getenv("OPENROUTER_API_KEY"); key != "" {
-		providers[ProviderOpenRouter] = NewOpenAIProvider(openai.NewClient(
+		providers[ProviderOpenRouter] = NewOpenRouterProvider(openai.NewClient(
 			openaiopt.WithAPIKey(key),
 			openaiopt.WithBaseURL("https://openrouter.ai/api/v1/"),
 		))

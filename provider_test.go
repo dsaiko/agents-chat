@@ -72,6 +72,12 @@ func TestForModel(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing ollama provider")
 	}
+
+	// OpenRouter model should fail (no openrouter provider registered)
+	_, _, err = providers.ForModel("openrouter/google/gemma-2-9b-it")
+	if err == nil {
+		t.Fatal("expected error for missing openrouter provider")
+	}
 }
 
 func TestRunAgentWithMock(t *testing.T) {
@@ -107,6 +113,24 @@ func TestRunAgentWithOllamaModel(t *testing.T) {
 	}
 	if reply != "Hello from Ollama" {
 		t.Errorf("reply = %q, want %q", reply, "Hello from Ollama")
+	}
+}
+
+func TestRunAgentWithOpenRouterModel(t *testing.T) {
+	providers := Providers{
+		ProviderOpenRouter: &mockProvider{response: "Hello from OpenRouter"},
+	}
+
+	lang := defaultLanguage
+	agent := Agent{Name: "Test", Model: "openrouter/google/gemma-2-9b-it", Instructions: "Be helpful."}
+	history := []string{"Moderator: Test question"}
+
+	reply, err := runAgent(context.Background(), providers, lang, agent, history)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reply != "Hello from OpenRouter" {
+		t.Errorf("reply = %q, want %q", reply, "Hello from OpenRouter")
 	}
 }
 
