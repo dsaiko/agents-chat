@@ -32,11 +32,10 @@ func main() {
 
 	providers := initProviders()
 
-	// Verify all agents have a working provider
-	for _, agent := range demo.Agents {
-		if _, _, err := providers.ForModel(agent.Model); err != nil {
-			log.Fatalf("agent %s (model %s): %v", agent.Name, agent.Model, err)
-		}
+	validationCtx, validationCancel := context.WithTimeout(context.Background(), providerHealthCheckTimeout)
+	defer validationCancel()
+	if err := validateAgentProviders(validationCtx, providers, demo.Agents); err != nil {
+		log.Fatal(err)
 	}
 
 	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Minute*15)
@@ -99,15 +98,16 @@ func runAgent(ctx context.Context, providers Providers, lang Language, agent Age
 func buildPrompt(lang Language, history []string) string {
 	const maxHistory = 8
 
-	start := 0
+	lines := history
 	if len(history) > maxHistory {
-		start = len(history) - maxHistory
+		tailStart := len(history) - (maxHistory - 1)
+		lines = append([]string{history[0]}, history[tailStart:]...)
 	}
 
 	var b strings.Builder
 	b.WriteString(lang.ConversationPre)
 	b.WriteString("\n\n")
-	for _, line := range history[start:] {
+	for _, line := range lines {
 		b.WriteString(line)
 		b.WriteString("\n")
 	}

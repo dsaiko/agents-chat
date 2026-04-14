@@ -16,6 +16,17 @@ func (m *mockProvider) Generate(_ context.Context, _ string, _ string, _ string,
 	return m.response, m.err
 }
 
+type mockHealthProvider struct {
+	mockProvider
+	healthErr error
+	calls     int
+}
+
+func (m *mockHealthProvider) HealthCheck(_ context.Context) error {
+	m.calls++
+	return m.healthErr
+}
+
 func TestResolveModel(t *testing.T) {
 	tests := []struct {
 		model        string
@@ -188,7 +199,7 @@ func TestBuildPrompt(t *testing.T) {
 func TestBuildPromptTruncation(t *testing.T) {
 	lang := defaultLanguage
 
-	// Create 10 history entries — only last 8 should appear
+	// Create 10 history entries — keep the first topic plus the last 7 replies.
 	var history []string
 	for i := range 10 {
 		history = append(history, fmt.Sprintf("Entry %d", i))
@@ -196,14 +207,17 @@ func TestBuildPromptTruncation(t *testing.T) {
 
 	prompt := buildPrompt(lang, history)
 
-	if strings.Contains(prompt, "Entry 0") {
-		t.Error("prompt should not contain Entry 0 (truncated)")
+	if !strings.Contains(prompt, "Entry 0") {
+		t.Error("prompt should contain Entry 0 (topic pinned)")
 	}
 	if strings.Contains(prompt, "Entry 1") {
 		t.Error("prompt should not contain Entry 1 (truncated)")
 	}
-	if !strings.Contains(prompt, "Entry 2") {
-		t.Error("prompt should contain Entry 2")
+	if strings.Contains(prompt, "Entry 2") {
+		t.Error("prompt should not contain Entry 2 (truncated)")
+	}
+	if !strings.Contains(prompt, "Entry 3") {
+		t.Error("prompt should contain Entry 3")
 	}
 	if !strings.Contains(prompt, "Entry 9") {
 		t.Error("prompt should contain Entry 9")
@@ -287,13 +301,53 @@ func TestParseLanguageJSON(t *testing.T) {
 	// Missing round_format %d → should use default
 	noFmt := `{"moderator":"M","round_format":"Runde","empty_reply":"(e)","conversation_pre":"P:","conversation_post":"P.","detected_language":"L"}`
 	lang = parseLanguageJSON(noFmt)
-	if lang.RoundFormat != defaultLanguage.RoundFormat {
-		t.Errorf("RoundFormat = %q, want default %q", lang.RoundFormat, defaultLanguage.RoundFormat)
+	if lang != defaultLanguage {
+		t.Errorf("expected defaultLanguage for invalid round_format")
+	}
+
+	// Missing required fields -> default
+	partial := `{"moderator":"Mod","round_format":"R %d/%d"}`
+	lang = parseLanguageJSON(partial)
+	if lang != defaultLanguage {
+		t.Errorf("expected defaultLanguage for partial JSON")
 	}
 
 	// Invalid JSON → default
 	lang = parseLanguageJSON("garbage")
 	if lang != defaultLanguage {
 		t.Errorf("expected defaultLanguage for invalid JSON")
+	}
+}
+
+func TestValidateAgentProvidersHealthCheck(t *testing.T) {
+	openaiProvider := &mockHealthProvider{}
+	providers := Providers{
+		ProviderOpenAI: openaiProvider,
+	}
+
+	agents := []Agent{
+		{Name: "A", Model: "gpt-4o"},
+		{Name: "B", Model: "gpt-5-mini"},
+	}
+
+	if err := validateAgentProviders(context.Background(), providers, agents); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if openaiProvider.calls != 1 {
+		t.Fatalf("health checks = %d, want 1", openaiProvider.calls)
+	}
+}
+
+func TestValidateAgentProvidersHealthCheckError(t *testing.T) {
+	providers := Providers{
+		ProviderOpenAI: &mockHealthProvider{healthErr: fmt.Errorf("boom")},
+	}
+
+	err := validateAgentProviders(context.Background(), providers, []Agent{{Name: "A", Model: "gpt-4o"}})
+	if err == nil {
+		t.Fatal("expected health check error")
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("error = %q, want boom", err)
 	}
 }
