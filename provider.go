@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropicopt "github.com/anthropics/anthropic-sdk-go/option"
@@ -15,14 +16,16 @@ import (
 
 // Provider name constants used as keys in the Providers map.
 const (
-	ProviderOpenAI      = "openai"
-	ProviderAnthropic   = "anthropic"
-	ProviderOllama      = "ollama"
-	ProviderOpenRouter  = "openrouter"
+	ProviderOpenAI     = "openai"
+	ProviderAnthropic  = "anthropic"
+	ProviderOllama     = "ollama"
+	ProviderOpenRouter = "openrouter"
 )
 
 // defaultMaxTokens is the fallback max token limit for providers that require it (e.g., Anthropic).
 const defaultMaxTokens = 1024
+
+const providerHealthCheckTimeout = 10 * time.Second
 
 // GenerateParams holds optional parameters for a completion request.
 // Pointer fields use nil to mean "use provider default"; zero is a valid explicit value.
@@ -37,6 +40,12 @@ type GenerateParams struct {
 // Provider abstracts an LLM API for text completion.
 type Provider interface {
 	Generate(ctx context.Context, model string, systemPrompt string, userPrompt string, params GenerateParams) (string, error)
+}
+
+// providerHealthChecker is implemented by providers that can validate connectivity
+// and credentials at startup.
+type providerHealthChecker interface {
+	HealthCheck(ctx context.Context) error
 }
 
 // Providers maps provider names to their implementations.
@@ -72,6 +81,34 @@ func initProviders() Providers {
 		))
 	}
 	return providers
+}
+
+// validateAgentProviders ensures all configured agents resolve to an available
+// provider and that each distinct provider can successfully answer a lightweight
+// health check before the debate starts.
+func validateAgentProviders(ctx context.Context, providers Providers, agents []Agent) error {
+	checked := map[string]bool{}
+	for _, agent := range agents {
+		p, _, err := providers.ForModel(agent.Model)
+		if err != nil {
+			return fmt.Errorf("agent %s (model %s): %w", agent.Name, agent.Model, err)
+		}
+
+		providerName, _ := resolveModel(agent.Model)
+		if checked[providerName] {
+			continue
+		}
+		checked[providerName] = true
+
+		hc, ok := p.(providerHealthChecker)
+		if !ok {
+			continue
+		}
+		if err := hc.HealthCheck(ctx); err != nil {
+			return fmt.Errorf("agent %s (model %s): %w", agent.Name, agent.Model, err)
+		}
+	}
+	return nil
 }
 
 // resolveModel maps a model identifier to a provider name and the model name to pass to the API.

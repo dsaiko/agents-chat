@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -72,6 +73,25 @@ func TestLoadWithRounds(t *testing.T) {
 	}
 	if demo.Question != "Test topic" {
 		t.Errorf("question = %q, want %q", demo.Question, "Test topic")
+	}
+}
+
+func TestLoadRejectsNegativeRounds(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "rounds: -1\nquestion: Test topic\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ninstructions: Hi\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err == nil {
+		t.Fatal("expected error for negative rounds")
 	}
 }
 
@@ -179,6 +199,89 @@ func TestLoadTemperatureUnset(t *testing.T) {
 	}
 	if demo.Agents[0].TopP != nil {
 		t.Errorf("top_p should be nil when not set, got %f", *demo.Agents[0].TopP)
+	}
+}
+
+func TestLoadRejectsNegativeMaxTokens(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "question: Test\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\nmax_tokens: -1\ninstructions: Hi\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err == nil {
+		t.Fatal("expected error for negative max_tokens")
+	}
+}
+
+func TestLoadRejectsOutOfRangeTemperature(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "question: Test\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ntemperature: 3\ninstructions: Hi\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err == nil {
+		t.Fatal("expected error for out-of-range temperature")
+	}
+}
+
+func TestLoadRejectsOutOfRangeTopP(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "question: Test\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ntop_p: 1.1\ninstructions: Hi\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err == nil {
+		t.Fatal("expected error for out-of-range top_p")
+	}
+}
+
+func TestLoadRejectsNaNTemperature(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("question.yaml", "question: Test\n")
+	writeFile("AgentA.yaml", "name: A\nmodel: gpt-4o\ntemperature: .nan\ninstructions: Hi\n")
+
+	var demo Demo
+	if err := demo.Load(dir); err == nil {
+		t.Fatal("expected error for NaN temperature")
+	}
+}
+
+func TestValidateOptionalRangeRejectsInfinity(t *testing.T) {
+	value := math.Inf(1)
+	if err := validateOptionalRange("temperature", &value, 0, 2, "AgentA.yaml"); err == nil {
+		t.Fatal("expected infinity to be rejected")
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -15,6 +16,15 @@ type AnthropicProvider struct {
 // NewAnthropicProvider creates a new Anthropic provider with the given client.
 func NewAnthropicProvider(client anthropic.Client) *AnthropicProvider {
 	return &AnthropicProvider{client: client}
+}
+
+// HealthCheck validates credentials and base URL against a lightweight models API call.
+func (p *AnthropicProvider) HealthCheck(ctx context.Context) error {
+	_, err := p.client.Models.List(ctx, anthropic.ModelListParams{Limit: anthropic.Int(1)})
+	if err != nil {
+		return fmt.Errorf("anthropic health check failed: %w", err)
+	}
+	return nil
 }
 
 // Generate sends a prompt to Anthropic and returns the text response.
@@ -49,6 +59,17 @@ func (p *AnthropicProvider) Generate(ctx context.Context, model string, systemPr
 		return "", err
 	}
 
+	switch msg.StopReason {
+	case "", anthropic.StopReasonEndTurn, anthropic.StopReasonStopSequence:
+		// OK.
+	case anthropic.StopReasonMaxTokens:
+		return "", fmt.Errorf("response incomplete: stopped at max_tokens")
+	case anthropic.StopReasonRefusal:
+		return "", fmt.Errorf("response refused")
+	default:
+		return "", fmt.Errorf("unsupported stop reason: %s", msg.StopReason)
+	}
+
 	var b strings.Builder
 	for _, block := range msg.Content {
 		if block.Type == "text" {
@@ -56,5 +77,10 @@ func (p *AnthropicProvider) Generate(ctx context.Context, model string, systemPr
 		}
 	}
 
-	return strings.TrimSpace(b.String()), nil
+	text := strings.TrimSpace(b.String())
+	if text == "" && len(msg.Content) > 0 {
+		return "", fmt.Errorf("response contained no text output")
+	}
+
+	return text, nil
 }

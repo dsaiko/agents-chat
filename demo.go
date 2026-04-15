@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -54,6 +55,8 @@ func (d *Demo) Load(dir string) error {
 	d.Rounds = qf.Rounds
 	if d.Rounds == 0 {
 		d.Rounds = 5
+	} else if d.Rounds < 0 {
+		return fmt.Errorf("invalid 'rounds': must be 0 or greater")
 	}
 
 	entries, err := os.ReadDir(dir)
@@ -77,6 +80,8 @@ func (d *Demo) Load(dir string) error {
 		if err := yaml.Unmarshal(data, &agent); err != nil {
 			return fmt.Errorf("parsing %s: %w", name, err)
 		}
+		agent.Name = strings.TrimSpace(agent.Name)
+		agent.Model = strings.TrimSpace(agent.Model)
 		if agent.Name == "" {
 			return fmt.Errorf("missing 'name' in %s", name)
 		}
@@ -84,6 +89,9 @@ func (d *Demo) Load(dir string) error {
 			return fmt.Errorf("missing 'model' in %s", name)
 		}
 		agent.Instructions = strings.TrimSpace(agent.Instructions)
+		if err := validateAgentConfig(agent, name); err != nil {
+			return err
+		}
 		d.Agents = append(d.Agents, agent)
 	}
 
@@ -91,5 +99,28 @@ func (d *Demo) Load(dir string) error {
 		return d.Agents[i].Name < d.Agents[j].Name
 	})
 
+	return nil
+}
+
+func validateAgentConfig(agent Agent, filename string) error {
+	if agent.MaxTokens < 0 {
+		return fmt.Errorf("invalid 'max_tokens' in %s: must be 0 or greater", filename)
+	}
+	if err := validateOptionalRange("temperature", agent.Temperature, 0, 2, filename); err != nil {
+		return err
+	}
+	if err := validateOptionalRange("top_p", agent.TopP, 0, 1, filename); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateOptionalRange(field string, value *float64, min float64, max float64, filename string) error {
+	if value == nil {
+		return nil
+	}
+	if math.IsNaN(*value) || math.IsInf(*value, 0) || *value < min || *value > max {
+		return fmt.Errorf("invalid %q in %s: must be between %g and %g", field, filename, min, max)
+	}
 	return nil
 }

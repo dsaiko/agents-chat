@@ -83,10 +83,47 @@ func parseLanguageJSON(raw string) Language {
 		return defaultLanguage
 	}
 
-	// Validate that RoundFormat contains %d placeholders
-	if lang.RoundFormat == "" || !strings.Contains(lang.RoundFormat, "%d") {
-		lang.RoundFormat = defaultLanguage.RoundFormat
+	lang.Moderator = strings.TrimSpace(lang.Moderator)
+	lang.RoundFormat = strings.TrimSpace(lang.RoundFormat)
+	lang.EmptyReply = strings.TrimSpace(lang.EmptyReply)
+	lang.ConversationPre = strings.TrimSpace(lang.ConversationPre)
+	lang.ConversationPost = strings.TrimSpace(lang.ConversationPost)
+	lang.Language = strings.TrimSpace(lang.Language)
+
+	if lang.Moderator == "" ||
+		lang.EmptyReply == "" ||
+		lang.ConversationPre == "" ||
+		lang.ConversationPost == "" ||
+		lang.Language == "" ||
+		!validRoundFormat(lang.RoundFormat) {
+		return defaultLanguage
 	}
 
 	return lang
+}
+
+func validRoundFormat(format string) bool {
+	if format == "" {
+		return false
+	}
+
+	placeholders := 0
+	for i := 0; i < len(format); i++ {
+		if format[i] != '%' {
+			continue
+		}
+		if i+1 >= len(format) {
+			return false
+		}
+		i++
+		switch format[i] {
+		case '%':
+			continue
+		case 'd':
+			placeholders++
+		default:
+			return false
+		}
+	}
+	return placeholders == 2
 }

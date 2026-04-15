@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/ollama/ollama/api"
@@ -15,6 +16,14 @@ type OllamaProvider struct {
 // NewOllamaProvider creates a new Ollama provider with the given client.
 func NewOllamaProvider(client *api.Client) *OllamaProvider {
 	return &OllamaProvider{client: client}
+}
+
+// HealthCheck verifies that the Ollama server is reachable before the first turn.
+func (p *OllamaProvider) HealthCheck(ctx context.Context) error {
+	if err := p.client.Heartbeat(ctx); err != nil {
+		return fmt.Errorf("ollama health check failed: %w", err)
+	}
+	return nil
 }
 
 // Generate sends a prompt to Ollama and returns the text response.
@@ -54,5 +63,10 @@ func (p *OllamaProvider) Generate(ctx context.Context, model string, systemPromp
 		return "", err
 	}
 
-	return strings.TrimSpace(response.Message.Content), nil
+	text := strings.TrimSpace(response.Message.Content)
+	if text == "" && len(response.Message.ToolCalls) > 0 {
+		return "", fmt.Errorf("response contained tool calls instead of text output")
+	}
+
+	return text, nil
 }
