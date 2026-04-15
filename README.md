@@ -4,6 +4,12 @@ A multi-agent debate simulator where AI agents with different personalities argu
 
 An OpenAI agent can debate a Claude agent, a local Ollama model, or any model via OpenRouter, each with its own personality, language, and model, all configured through simple YAML files.
 
+## Status
+
+This Go version of the project will not be maintained or expanded further.
+
+Active development is moving to the Rust version here: [agents-chat-rs](https://github.com/dsaiko/agents-chat-rs).
+
 ## Features
 
 - **Multi-provider support** — agents can use OpenAI, Anthropic (Claude), OpenRouter, or local Ollama models, mixed freely in the same debate
